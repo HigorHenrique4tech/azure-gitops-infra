@@ -1,0 +1,49 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!envs/*.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+tfplan
+*.tfplan
+# O lock file DEVE ser versionado (não ignore .terraform.lock.hcl)
+
+# Segredos e credenciais
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+kubeconfig
+*.kubeconfig
+
+# Ferramentas
+.pre-commit-cache/
+.checkov.baseline
+.tflint.d/
+
+# Python / Node (app)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+dist/
+coverage/
+
+# Editores e SO
+.idea/
+.vscode/
+*.swp
+.DS_Store

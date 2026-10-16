@@ -1,0 +1,8 @@
+# Todo PR passa pelo dono do caminho alterado.
+# Dono padrão do repositório:
+*                       @HigorHenrique4tech
+
+# Mudanças que afetam a infraestrutura compartilhada e o pipeline
+/stacks/                @HigorHenrique4tech
+/modules/               @HigorHenrique4tech
+/.github/               @HigorHenrique4tech
