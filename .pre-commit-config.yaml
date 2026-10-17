@@ -22,6 +22,12 @@ repos:
       - id: terraform_fmt
       - id: terraform_validate
       - id: terraform_tflint
+      # Mantém a tabela de variáveis e outputs dos READMEs dos módulos sempre em dia.
+      - id: terraform_docs
+        files: ^modules/
+        args:
+          # Caminho relativo à raiz do repositório, de onde o hook roda
+          - --args=--config=.terraform-docs.yml
 
   - repo: https://github.com/bridgecrewio/checkov
     rev: 3.3.29
