@@ -16,7 +16,9 @@ override.tf.json
 terraform.rc
 tfplan
 *.tfplan
-# O lock file DEVE ser versionado (não ignore .terraform.lock.hcl)
+# O lock file DEVE ser versionado nas stacks (não ignore .terraform.lock.hcl).
+# Nos módulos NÃO: módulo declara uma faixa de versões e quem fixa é a stack que o usa.
+modules/**/.terraform.lock.hcl
 
 # Segredos e credenciais
 .env
