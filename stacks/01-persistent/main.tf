@@ -13,18 +13,18 @@ locals {
   suffix = substr(md5(data.azurerm_client_config.current.subscription_id), 0, 6)
 }
 
-resource "azurerm_resource_group" "rg" {
-  name     = "rg-gitops-persistent"
-  location = var.location
-  tags     = local.tags
+# O Resource Group é criado pela stack 00-github-oidc (quem tem permissão de criar RG na subscription).
+# Esta stack só o lê: a identidade do pipeline tem permissão apenas DENTRO dele.
+data "azurerm_resource_group" "rg" {
+  name = "rg-gitops-persistent"
 }
 
 module "acr" {
   source = "../../modules/acr"
 
   name                = "acrgitops${local.suffix}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg.location
   tags                = local.tags
 }
 
@@ -32,16 +32,16 @@ module "keyvault" {
   source = "../../modules/keyvault"
 
   name                = "kv-gitops-${local.suffix}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg.location
   tenant_id           = data.azurerm_client_config.current.tenant_id
   tags                = local.tags
 }
 
 resource "azurerm_log_analytics_workspace" "log_analytics" {
   name                = "law-gitops-persistent"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_resource_group.rg.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
   tags                = local.tags

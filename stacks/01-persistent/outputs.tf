@@ -1,6 +1,6 @@
 output "resource_group_name" {
   description = "Resource Group da camada persistente."
-  value       = azurerm_resource_group.rg.name
+  value       = data.azurerm_resource_group.rg.name
 }
 
 output "acr_id" {
