@@ -23,7 +23,7 @@ env:
 
 jobs:
   apply:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     # O job só COMEÇA depois da aprovação manual no Environment. É também isso que faz o token
     # OIDC ter o subject "environment:azure-dev", aceito apenas pela identidade de apply.

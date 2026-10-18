@@ -19,7 +19,7 @@ env:
 jobs:
   # Mesmos hooks que rodam na sua máquina, para o CI e o pre-commit local nunca divergirem.
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -54,7 +54,7 @@ jobs:
 
   # Testa os módulos com provider simulado (mock_provider): sem login e sem custo.
   module-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -82,7 +82,7 @@ jobs:
     needs: [quality]
     # PRs de fork e do Dependabot não recebem token OIDC.
     if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       id-token: write # permite pedir o token OIDC ao GitHub

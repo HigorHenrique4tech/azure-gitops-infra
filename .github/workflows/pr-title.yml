@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   semantic-title:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       # Com squash merge, o título do PR vira a mensagem do commit na main.
