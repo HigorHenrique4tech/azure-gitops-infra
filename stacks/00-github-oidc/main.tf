@@ -19,6 +19,12 @@ locals {
     aks        = "rg-gitops-aks"
   }
 
+  # Prefixo do subject no formato IMUTÁVEL do GitHub: nome E ID do dono e do repositório.
+  # Repositórios criados depois de 15/07/2026 já usam esse formato. A vantagem é de segurança:
+  # se o repositório for apagado e outra pessoa recriar o mesmo nome, o ID muda e o token
+  # dela deixa de casar com esta credencial. Só o nome não protegeria contra isso.
+  subject_prefix = "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}"
+
   # Duas identidades, com credenciais federadas diferentes:
   # - plan: aceita tokens de qualquer pull request do repositório (só planeja);
   # - apply: só aceita tokens de jobs que usam o Environment, que exige aprovação manual.
@@ -26,11 +32,11 @@ locals {
   identities = {
     plan = {
       name    = "id-gitops-gh-plan"
-      subject = "repo:${var.github_owner}/${var.github_repo}:pull_request"
+      subject = "${local.subject_prefix}:pull_request"
     }
     apply = {
       name    = "id-gitops-gh-apply"
-      subject = "repo:${var.github_owner}/${var.github_repo}:environment:${var.github_environment}"
+      subject = "${local.subject_prefix}:environment:${var.github_environment}"
     }
   }
 
