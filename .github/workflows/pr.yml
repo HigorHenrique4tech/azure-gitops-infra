@@ -1,0 +1,143 @@
+name: PR
+
+on:
+  pull_request:
+    branches: [main]
+
+# Princípio do menor privilégio: o padrão é só ler. Cada job pede o que mais precisar.
+permissions:
+  contents: read
+
+# Um push novo no mesmo PR cancela a execução anterior, que já está desatualizada.
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  TERRAFORM_VERSION: "1.16.5"
+
+jobs:
+  # Mesmos hooks que rodam na sua máquina, para o CI e o pre-commit local nunca divergirem.
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # terraform_wrapper: false deixa a saída do terraform "limpa". O wrapper do setup-terraform
+      # embrulha cada chamada e atrapalha quem redireciona ou lê o stdout.
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.64.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: pip install pre-commit
+
+      # SKIP=terraform_docs: o terraform-docs não está instalado no runner.
+      # O hook de gitleaks olha só o que está "staged", então no CI ele não encontra nada para varrer.
+      # A varredura de segredos fica por conta do secret scanning e da push protection do GitHub.
+      - run: pre-commit run --all-files --show-diff-on-failure
+        env:
+          SKIP: terraform_docs
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Testa os módulos com provider simulado (mock_provider): sem login e sem custo.
+  module-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [network, acr, keyvault]
+    defaults:
+      run:
+        working-directory: modules/${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - run: terraform init -backend=false -input=false
+      - run: terraform test
+
+  # Planeja só as stacks que o pipeline gerencia. As stacks 00-* são aplicadas à mão e a
+  # identidade de plan não tem permissão sobre elas.
+  plan:
+    needs: [quality]
+    # PRs de fork e do Dependabot não recebem token OIDC.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write # permite pedir o token OIDC ao GitHub
+      contents: read
+      pull-requests: write # permite comentar o plan no PR
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [01-persistent]
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    env:
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      # Login sem senha: troca o token do GitHub (subject "pull_request") pelo acesso da identidade de plan.
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID_PLAN }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - run: terraform init -input=false
+
+      # pipefail: se o terraform falhar, o passo falha mesmo com o "| tee" no fim.
+      - run: |
+          set -o pipefail
+          terraform plan -input=false -no-color -lock-timeout=300s -out=tfplan 2>&1 | tee plan.txt
+
+      # O comentário é limitado pelo GitHub a cerca de 65 mil caracteres, por isso o head -c.
+      - name: Montar o comentário
+        if: ${{ !cancelled() }}
+        run: |
+          touch plan.txt
+          {
+            echo "### Terraform plan: \`${{ matrix.stack }}\`"
+            echo
+            echo '```'
+            head -c 60000 plan.txt
+            echo
+            echo '```'
+          } > comment.md
+
+      # "Sticky": atualiza o mesmo comentário a cada push, em vez de criar um novo.
+      - uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        if: ${{ !cancelled() }}
+        with:
+          header: plan-${{ matrix.stack }}
+          path: stacks/${{ matrix.stack }}/comment.md

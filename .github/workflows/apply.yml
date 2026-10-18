@@ -1,0 +1,74 @@
+name: Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "stacks/01-persistent/**"
+      - "modules/**"
+      - ".github/workflows/apply.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Dois applies nunca rodam juntos. cancel-in-progress é false de propósito: cancelar um apply
+# no meio pode deixar o state e os recursos inconsistentes. O seguinte espera na fila.
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+
+env:
+  TERRAFORM_VERSION: "1.16.5"
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # O job só COMEÇA depois da aprovação manual no Environment. É também isso que faz o token
+    # OIDC ter o subject "environment:azure-dev", aceito apenas pela identidade de apply.
+    environment: azure-dev
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      max-parallel: 1
+      matrix:
+        stack: [01-persistent]
+    defaults:
+      run:
+        working-directory: stacks/${{ matrix.stack }}
+    env:
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      # AZURE_CLIENT_ID_APPLY é uma variável do Environment: só jobs que o usam enxergam.
+      - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID_APPLY }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - run: terraform init -input=false
+
+      - run: terraform plan -input=false -no-color -lock-timeout=300s -out=tfplan
+
+      # Deixa o plan visível no resumo da execução, para ficar registrado o que foi aplicado.
+      - name: Resumo do plan
+        run: |
+          {
+            echo '```'
+            terraform show -no-color tfplan | head -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Aplicar um plan salvo dispensa o -auto-approve: executa exatamente o que foi planejado.
+      - run: terraform apply -input=false -lock-timeout=300s tfplan
